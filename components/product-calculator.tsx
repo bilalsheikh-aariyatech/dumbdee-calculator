@@ -35,6 +35,7 @@ export function ProductCalculator() {
         // Calculate Dumbdee Price: (SP × DP%) × (1 + GST%)
         const dumbdeePrice = sp * (dumbdeePercentage / 100);
         const finalProfit = dumbdeePrice * (1 + gst / 100);
+        const finalPlatformPrice = finalProfit + sp;
 
         setResult({
             marketPrice: mp,
@@ -44,6 +45,7 @@ export function ProductCalculator() {
             dumbdeePrice,
             gst,
             finalProfit,
+            finalPlatformPrice,
         });
     };
 
@@ -108,7 +110,7 @@ export function ProductCalculator() {
                                 Product Category
                             </Label>
                             <Select value={category} onValueChange={setCategory}>
-                                <SelectTrigger className="bg-input border-border text-foreground">
+                                <SelectTrigger className="bg-input border-border text-foreground w-full">
                                     <SelectValue placeholder="Select category" />
                                 </SelectTrigger>
                                 <SelectContent className="bg-popover border-border">
@@ -217,15 +219,31 @@ export function ProductCalculator() {
 
                         <Separator className="bg-border" />
 
-                        <div className="bg-primary/10 p-6 rounded-lg border border-primary/20">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-primary/10 p-6 rounded-lg border border-primary/20">
+                            {/* Final Platform Profit */}
                             <div className="text-center">
                                 <div className="text-sm text-muted-foreground mb-2">
                                     Final Platform Profit (including {result.gst}% GST)
                                 </div>
-                                <div className="text-4xl font-bold text-primary">₹{result.finalProfit.toFixed(2)}</div>
+                                <div className="text-4xl font-bold text-green-500">₹{result.finalProfit.toFixed(2)}</div>
                                 <div className="text-sm text-muted-foreground mt-2">
                                     Base: ₹{result.dumbdeePrice.toFixed(2)} + GST: ₹
                                     {(result.finalProfit - result.dumbdeePrice).toFixed(2)}
+                                </div>
+                            </div>
+
+                            {/* Final Platform Price */}
+                            <div className="text-center">
+                                <div className="text-sm text-muted-foreground mb-2">
+                                    Final Platform Price (including {result.gst}% GST)
+                                </div>
+                                <div className="text-4xl font-bold text-primary">
+                                    ₹{result.finalPlatformPrice.toFixed(2)}
+                                </div>
+                                <div className="text-sm text-muted-foreground mt-2">
+                                    Base: ₹{result.finalProfit.toFixed(2)} + GST: ₹
+                                    {(result.finalProfit - result.dumbdeePrice).toFixed(2)} + SP: ₹
+                                    {result.sellerPrice.toFixed(2)}
                                 </div>
                             </div>
                         </div>

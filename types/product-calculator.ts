@@ -6,4 +6,5 @@ export interface CalculationResult {
     dumbdeePrice: number;
     gst: number;
     finalProfit: number;
+    finalPlatformPrice: number;
 }
