@@ -1,4 +1,4 @@
-import { ProductCalculator } from "@/components/product-calculator";
+import ProductCalculator from "@/components/product-calculator";
 
 export default function Home() {
     return (
