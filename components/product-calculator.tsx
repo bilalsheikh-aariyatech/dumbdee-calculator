@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import logger from "@/utils/logger";
-import { AlertTriangle, Calculator, Download, RotateCcw, Search } from "lucide-react";
+import { AlertTriangle, Calculator, Download, Loader2, RotateCcw, Search } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -27,9 +27,10 @@ interface CalculationResult {
     };
     referencePrice: number;
     minimumMargin: number;
-    rtoBuffer: number;
+    rtoBuffer: "150" | "20%";
     baseSellingPrice: number;
-    finalSellingPrice: number;
+    priceWithAddedMargin: number;
+    finalPlatformSellingPrice: number;
     platformProfit: number;
     profitMargin: number;
     competitiveAnalysis: string;
@@ -93,7 +94,8 @@ export default function ProductCalculator() {
                 minimumMargin: resData?.minimumMargin,
                 rtoBuffer: resData?.rtoBuffer,
                 baseSellingPrice: resData?.baseSellingPrice,
-                finalSellingPrice: resData?.finalSellingPrice,
+                priceWithAddedMargin: resData?.priceWithAddedMargin,
+                finalPlatformSellingPrice: resData?.finalPlatformSellingPrice,
                 platformProfit: resData?.platformProfit,
                 profitMargin: resData?.profitMargin,
                 competitiveAnalysis: resData?.competitiveAnalysis,
@@ -145,7 +147,7 @@ export default function ProductCalculator() {
         }
     };
 
-    const searchProducts = async (seoTitle: string) => {
+    const searchProducts = async (seoTitle: string): Promise<CalculationResult | undefined> => {
         setSearchError("");
 
         try {
@@ -210,9 +212,10 @@ export default function ProductCalculator() {
                 priceDistribution,
                 referencePrice: Math.max(averagePrice, medianPrice),
                 minimumMargin: 30,
-                rtoBuffer: 20,
+                rtoBuffer: "20%",
                 baseSellingPrice: 0,
-                finalSellingPrice: 0,
+                priceWithAddedMargin: 0,
+                finalPlatformSellingPrice: 0,
                 platformProfit: 0,
                 profitMargin: 0,
                 competitiveAnalysis: "",
@@ -247,43 +250,68 @@ export default function ProductCalculator() {
             return;
         }
 
-        // Step 1: Use average price as reference price
-        const referencePrice = result.averagePrice;
+        // Step 1: calculate reference price
+        let referencePrice;
 
-        // Step 2: Use final seller price as base selling price
+        if (fsp > result.medianPrice) {
+            referencePrice = fsp;
+        } else {
+            referencePrice = result.medianPrice;
+        }
+
+        // Step 2: Use reference price as base selling price
         const minimumMargin = 30;
-        const priceWithAddedMargin = fsp * (1 + minimumMargin / 100);
+        const priceWithAddedMargin = referencePrice * (1 + minimumMargin / 100);
 
-        // Step 3: Add RTO buffer (20%)
-        const rtoBuffer = 20;
-        const finalSellingPrice = priceWithAddedMargin * (1 + rtoBuffer / 100);
+        // Step 3: Add RTO buffer
+        let rtoBuffer: "150" | "20%";
+
+        if (referencePrice >= 750) {
+            rtoBuffer = "150";
+        } else {
+            rtoBuffer = "20%";
+        }
+
+        let finalPlatformSellingPrice: number;
+
+        if (rtoBuffer === "150") {
+            finalPlatformSellingPrice = priceWithAddedMargin + 150;
+        } else {
+            const rtoPrice = referencePrice * 0.2;
+            const priceWithRTO = priceWithAddedMargin + rtoPrice;
+
+            finalPlatformSellingPrice = priceWithRTO;
+        }
 
         // Step 4: Calculate platform profit
-        const platformProfit = finalSellingPrice - sc;
+        const platformProfit = finalPlatformSellingPrice - referencePrice;
 
         // Step 5: Calculate profit margin
-        const profitMargin = (platformProfit / sc) * 100;
+        const profitMargin = (platformProfit / referencePrice) * 100;
 
         // Step 6: Competitive analysis
         let competitiveAnalysis = "";
-        if (finalSellingPrice < referencePrice * 0.7) {
+
+        if (fsp < result.medianPrice * 0.7) {
             competitiveAnalysis =
-                "💡 Very Competitive - Seller's Price is much lower than market average. Consider increasing price for better margins.";
-        } else if (finalSellingPrice <= referencePrice) {
-            competitiveAnalysis = "✅ Competitive - Seller's Price is within average range";
-        } else if (finalSellingPrice <= referencePrice * 1.1) {
+                "💡 Very Competitive - Seller's Price is much lower than market median. Consider increasing price for better margins.";
+        } else if (fsp < result.medianPrice) {
+            competitiveAnalysis = "✅ Competitive - Seller's Price is within median range";
+        } else if (fsp < result.medianPrice * 1.1) {
             competitiveAnalysis =
-                "⚠️ Slightly High - Seller's Price is slightly above average range. Consider market positioning";
+                "⚠️ Slightly High - Seller's Price is slightly above median range. Consider market positioning";
         } else {
-            competitiveAnalysis = "❌ Too High - Seller's Price is above average range. May struggle to compete";
+            competitiveAnalysis = "❌ Too High - Seller's Price is above median range. May struggle to compete";
         }
 
         setResult({
             ...result,
             sellerCost: sc,
+            rtoBuffer,
             finalSellerPrice: fsp,
-            baseSellingPrice: priceWithAddedMargin,
-            finalSellingPrice,
+            baseSellingPrice: referencePrice,
+            priceWithAddedMargin,
+            finalPlatformSellingPrice,
             platformProfit,
             profitMargin,
             competitiveAnalysis,
@@ -333,7 +361,7 @@ export default function ProductCalculator() {
             Pricing Calculation:
             - Base Selling Price: ₹${result.baseSellingPrice.toFixed(2)}
             - RTO Buffer: ${result.rtoBuffer}%
-            - Final Selling Price: ₹${result.finalSellingPrice.toFixed(2)}
+            - Final Selling Price: ₹${result.finalPlatformSellingPrice.toFixed(2)}
 
             Platform Metrics:
             - Platform Profit: ₹${result.platformProfit.toFixed(2)}
@@ -442,14 +470,24 @@ export default function ProductCalculator() {
                             disabled={isSearching}
                             className="bg-blue-600 text-white hover:bg-blue-700"
                         >
-                            <Search className="h-4 w-4 mr-2" />
-                            {isSearching ? "Searching..." : "Calculate Market Analysis"}
+                            {isSearching ? (
+                                <>
+                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                    Searching
+                                </>
+                            ) : (
+                                <>
+                                    <Search className="h-4 w-4 mr-2" />
+                                    Calculate Market Analysis
+                                </>
+                            )}
                         </Button>
 
                         <Button
                             onClick={resetCalculation}
                             variant="outline"
                             className="border-border text-foreground hover:bg-accent hover:text-accent-foreground"
+                            disabled={isSearching}
                         >
                             <RotateCcw className="h-4 w-4 mr-2" />
                             Reset
@@ -549,30 +587,33 @@ export default function ProductCalculator() {
                             <CardContent className="space-y-4">
                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
                                     <div className="bg-secondary p-4 rounded-lg">
-                                        <div className="text-sm text-secondary-foreground/70">Final Seller Price</div>
+                                        <div className="text-sm text-secondary-foreground/70">Base Price</div>
                                         <div className="text-xl font-bold text-secondary-foreground">
-                                            ₹{result.sellerCost.toFixed(2)}
+                                            ₹{result.baseSellingPrice.toFixed(2)}
                                         </div>
                                     </div>
 
                                     <div className="bg-yellow-50 p-4 rounded-lg border border-yellow-200">
                                         <div className="text-sm text-yellow-600">Base Price (30% margin)</div>
                                         <div className="text-xl font-bold text-yellow-800">
-                                            ₹{result.baseSellingPrice.toFixed(2)}
+                                            ₹{result.priceWithAddedMargin.toFixed(2)}
                                         </div>
                                     </div>
 
                                     <div className="bg-red-50 p-4 rounded-lg border border-red-200">
-                                        <div className="text-sm text-red-600">+ RTO Buffer (20%)</div>
+                                        <div className="text-sm text-red-600">+ RTO Buffer</div>
                                         <div className="text-xl font-bold text-red-800">
-                                            ₹{(result.finalSellingPrice - result.baseSellingPrice).toFixed(2)}
+                                            ₹{" "}
+                                            {result?.rtoBuffer === "20%"
+                                                ? (result.baseSellingPrice * 0.2).toFixed(2)
+                                                : "150"}
                                         </div>
                                     </div>
 
                                     <div className="bg-primary/10 p-4 rounded-lg border border-primary/20">
                                         <div className="text-sm text-primary">Final Selling Price</div>
                                         <div className="text-2xl font-bold text-primary">
-                                            ₹{result.finalSellingPrice.toFixed(2)}
+                                            ₹{result.finalPlatformSellingPrice.toFixed(2)}
                                         </div>
                                     </div>
 
@@ -607,23 +648,6 @@ export default function ProductCalculator() {
                     </Card>
                 </>
             )}
-
-            {/* Formula Reference */}
-            <Card className="bg-card border-border">
-                <CardContent className="space-y-4">
-                    <div className="bg-muted p-4 pl-10 rounded-lg">
-                        <ul className="text-sm text-muted-foreground space-y-1 list-decimal">
-                            <li>Generate SEO-optimized title using Gemini AI</li>
-                            <li>Search market using SerpApi with optimized title</li>
-                            <li>Extract and analyze price data from search results</li>
-                            <li>Calculate market statistics (average, median, distribution)</li>
-                            <li>Use seller's final price as base selling price</li>
-                            <li>Add 20% RTO buffer to base price</li>
-                            <li>Compare final price with market average for competitiveness</li>
-                        </ul>
-                    </div>
-                </CardContent>
-            </Card>
         </div>
     );
 }
