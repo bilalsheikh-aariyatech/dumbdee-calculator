@@ -4,7 +4,7 @@ import { getJson } from "serpapi";
 
 export async function POST(req: NextRequest) {
     try {
-        const apiKey = process.env.SERPAPI_API_KEY;
+        const apiKey = process.env.SERPAPI_MARKET_API_KEY;
 
         const body = await req.json();
         const { seoTitle } = body;

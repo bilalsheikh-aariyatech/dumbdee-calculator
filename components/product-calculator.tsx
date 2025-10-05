@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Calculator, Download, RotateCcw } from "lucide-react";
+import { Calculator, Loader2, RotateCcw } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -15,17 +15,22 @@ interface CalculationResult {
     finalPlatformSellingPrice: number;
     platformProfit: number;
     profitMargin: number;
+    usdPrice?: number;
+    exchangeRate?: number;
 }
 
 export default function ProductCalculator() {
     const [sellerCost, setSellerCost] = useState("");
     const [result, setResult] = useState<CalculationResult | null>(null);
+    const [loading, setLoading] = useState(false);
 
-    const calculatePrice = () => {
+    const calculatePrice = async () => {
         if (!sellerCost) {
             toast.error("Please enter seller cost");
             return;
         }
+
+        setLoading(true);
 
         const sc = Number.parseFloat(sellerCost);
 
@@ -59,14 +64,59 @@ export default function ProductCalculator() {
         // Step 5: Calculate profit margin
         const profitMargin = (platformProfit / sc) * 100;
 
-        setResult({
-            rtoBuffer,
-            sellerCost: sc,
-            priceWithAddedMargin,
-            finalPlatformSellingPrice,
-            platformProfit,
-            profitMargin,
-        });
+        // Step 6: Convert to USD
+        try {
+            const response = await fetch("/api/convert-currency", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    amount: finalPlatformSellingPrice,
+                    from: "INR",
+                    to: "USD",
+                }),
+            });
+
+            const data = await response.json();
+
+            if (data.success) {
+                setResult({
+                    rtoBuffer,
+                    sellerCost: sc,
+                    priceWithAddedMargin,
+                    finalPlatformSellingPrice,
+                    platformProfit,
+                    profitMargin,
+                    usdPrice: data.convertedAmount,
+                    exchangeRate: data.exchangeRate,
+                });
+            } else {
+                // If currency conversion fails, still show INR results
+                toast.error("Currency conversion failed, showing INR only");
+                setResult({
+                    rtoBuffer,
+                    sellerCost: sc,
+                    priceWithAddedMargin,
+                    finalPlatformSellingPrice,
+                    platformProfit,
+                    profitMargin,
+                });
+            }
+        } catch (error) {
+            // If API call fails, still show INR results
+            toast.error("Currency conversion unavailable");
+            setResult({
+                rtoBuffer,
+                sellerCost: sc,
+                priceWithAddedMargin,
+                finalPlatformSellingPrice,
+                platformProfit,
+                profitMargin,
+            });
+        } finally {
+            setLoading(false);
+        }
     };
 
     const resetCalculation = () => {
@@ -102,7 +152,12 @@ export default function ProductCalculator() {
                     </div>
 
                     <div className="flex gap-3">
-                        <Button onClick={calculatePrice} className="bg-blue-600 text-white hover:bg-blue-700">
+                        <Button
+                            onClick={calculatePrice}
+                            className="bg-blue-600 text-white hover:bg-blue-700"
+                            disabled={loading}
+                        >
+                            {loading && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
                             Calculate
                         </Button>
 
@@ -110,6 +165,7 @@ export default function ProductCalculator() {
                             onClick={resetCalculation}
                             variant="outline"
                             className="border-border text-foreground hover:bg-accent hover:text-accent-foreground"
+                            disabled={loading}
                         >
                             <RotateCcw className="h-4 w-4 mr-2" />
                             Reset
@@ -151,11 +207,16 @@ export default function ProductCalculator() {
                                         </div>
                                     </div>
 
-                                    <div className="bg-primary/10 p-4 rounded-lg border border-primary/20">
-                                        <div className="text-sm text-primary">Final Price for Dumbdee</div>
-                                        <div className="text-2xl font-bold text-primary">
+                                    <div className="bg-lime-500/10 p-4 rounded-lg border border-lime-500/20">
+                                        <div className="text-sm text-lime-500">Final Price for Dumbdee</div>
+                                        <div className="text-2xl font-bold text-lime-500">
                                             ₹{result.finalPlatformSellingPrice.toFixed(2)}
                                         </div>
+                                        {result.usdPrice && (
+                                            <div className="text-sm text-lime-500/70 mt-1">
+                                                ${result.usdPrice.toFixed(2)} USD
+                                            </div>
+                                        )}
                                     </div>
 
                                     <div className="bg-green-50 p-4 rounded-lg border border-green-200">
@@ -168,6 +229,13 @@ export default function ProductCalculator() {
                                         </div>
                                     </div>
                                 </div>
+
+                                {/* Exchange Rate Info */}
+                                {result.exchangeRate && (
+                                    <div className="text-sm text-muted-foreground text-center pt-2 border-t">
+                                        Exchange Rate: 1 INR = ${result.exchangeRate.toFixed(4)} USD
+                                    </div>
+                                )}
                             </CardContent>
                         </Card>
                     )}
