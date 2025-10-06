@@ -3,7 +3,9 @@ import type { NextRequest } from "next/server";
 import logger from "./utils/logger";
 
 export function middleware(request: NextRequest) {
-    if (request.nextUrl.pathname === "/login") return NextResponse.next();
+    if (request.nextUrl.pathname === "/login" || request.nextUrl.pathname === "/api/convert-currency") {
+        return NextResponse.next();
+    }
 
     const authCookie = request.cookies.get("auth");
     if (!authCookie) return NextResponse.redirect(new URL("/login", request.url));
